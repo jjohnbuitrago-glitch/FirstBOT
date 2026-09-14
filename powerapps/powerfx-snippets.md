@@ -1,162 +1,220 @@
-# Power Fx snippets for the Team Dashboard
+# Power Fx snippets: Regional Training Request Tracker
 
-Paste these into the named property of each control. `'Dashboard Items'` is
-the SharePoint data source added in the build guide.
+`'Training Requests'` is the SharePoint data source. Paste each formula into
+the named property of the control (select the control, pick the property in
+the formula-bar dropdown top-left, paste).
 
 ## App.OnStart
 
-Builds a local collection so charts/KPIs don't re-query SharePoint on every
-keystroke, and refreshes it on demand.
+```powerfx
+ClearCollect(colRequests, 'Training Requests');
+```
+
+Add a refresh icon anywhere with `OnSelect`:
 
 ```powerfx
-ClearCollect(
-    colItems,
-    'Dashboard Items'
+Refresh('Training Requests');
+ClearCollect(colRequests, 'Training Requests');
+```
+
+---
+
+## Screen 1 — Submit Request
+
+`Form1.DataSource` = `'Training Requests'`, `Form1.DefaultMode` = `FormMode.New`.
+
+`btnSubmit.OnSelect`:
+
+```powerfx
+SubmitForm(Form1);
+```
+
+`Form1.OnSuccess` (auto-stamps fields the requester shouldn't set themselves):
+
+```powerfx
+Patch(
+    'Training Requests',
+    Form1.LastSubmit,
+    { Status: { Value: "Submitted" }, RequestedDate: Today() }
+);
+Notify("Request submitted!", NotificationType.Success);
+ResetForm(Form1);
+Refresh('Training Requests');
+ClearCollect(colRequests, 'Training Requests');
+```
+
+---
+
+## Screen 2 — Dashboard
+
+### Date range pickers
+
+`dtFrom.DefaultDate`:
+
+```powerfx
+DateAdd(Today(), -12, TimeUnit.Months)
+```
+
+`dtTo.DefaultDate`:
+
+```powerfx
+Today()
+```
+
+### Filtered source (named formula, App.Formulas — or a `Set` in each picker's `OnChange`)
+
+```powerfx
+FilteredRequests = Filter(
+    colRequests,
+    RequestedDate >= dtFrom.SelectedDate,
+    RequestedDate <= dtTo.SelectedDate
 );
 ```
 
-Add a **Refresh** icon somewhere with `OnSelect`:
+If your version doesn't support named formulas, use `Set(varFiltered, Filter(...))` in each date picker's `OnChange` and replace `FilteredRequests` below with `varFiltered`.
+
+### KPI cards
+
+**Total Requests**:
 
 ```powerfx
-Refresh('Dashboard Items');
-ClearCollect(colItems, 'Dashboard Items');
+Text(CountRows(FilteredRequests))
 ```
 
-## Filter dropdowns (Screen 1)
-
-`ddCategory.Items`:
+**Total Participants Requested** (your core demand number):
 
 ```powerfx
-Distinct(colItems, Category.Value)
+Text(Sum(FilteredRequests, Participants), "#,##0")
 ```
 
-`ddStatus.Items`:
+**Pending Approvals**:
 
 ```powerfx
-Distinct(colItems, Status.Value)
+Text(CountRows(Filter(FilteredRequests, Status.Value in ["Submitted", "Under Review"])))
 ```
 
-## Filtered source used everywhere else
-
-Put this as a named formula in **App** (Advanced formula bar, top of
-App.Formulas) so every control references the same filtered set:
-
-```powerfx
-FilteredItems = Filter(
-    colItems,
-    (IsBlank(ddCategory.Selected) || Category.Value = ddCategory.Selected.Result) &&
-    (IsBlank(ddStatus.Selected) || Status.Value = ddStatus.Selected.Result)
-);
-```
-
-(If your Power Apps version doesn't support named formulas, create a
-`Filter1` variable instead: `Set(varFiltered, Filter(colItems, ...))` in each
-dropdown's `OnChange`, and reference `varFiltered` below.)
-
-## KPI cards
-
-**Total Items** label `Text`:
-
-```powerfx
-Text(CountRows(FilteredItems))
-```
-
-**Completed %** label `Text`:
+**Avg. Requests / Month**:
 
 ```powerfx
 Text(
-    CountRows(Filter(FilteredItems, Status.Value = "Completed")) /
-    Max(CountRows(FilteredItems), 1),
-    "0%"
+    CountRows(FilteredRequests) /
+    Max(DateDiff(dtFrom.SelectedDate, dtTo.SelectedDate, TimeUnit.Months), 1),
+    "0.0"
 )
 ```
 
-**Overdue** label `Text`:
+### Column chart — requests by Country
 
-```powerfx
-Text(CountRows(Filter(FilteredItems, DueDate < Today(), Status.Value <> "Completed")))
-```
-
-**Total Value** label `Text`:
-
-```powerfx
-Text(Sum(FilteredItems, Value), "$#,##0")
-```
-
-## Column chart — count by Category
-
-`Items` property of the chart control:
+Chart `Items`:
 
 ```powerfx
 AddColumns(
-    GroupBy(FilteredItems, "Category", "Grp"),
-    "Count", CountRows(Grp)
+    GroupBy(FilteredRequests, "Country", "Grp"),
+    "RequestCount", CountRows(Grp),
+    "ParticipantCount", Sum(Grp, Participants)
 )
 ```
 
-Set the chart's category field to `Category.Value` and value field to
-`Count`.
+Category field: `Country.Value`. Value field: `RequestCount` (or `ParticipantCount` if you want headcount demand instead of request count).
 
-## Pie/donut chart — count by Status
+### Bar/column chart — requests by Training Category
 
 ```powerfx
 AddColumns(
-    GroupBy(FilteredItems, "Status", "Grp"),
-    "Count", CountRows(Grp)
+    GroupBy(FilteredRequests, "TrainingCategory", "Grp"),
+    "RequestCount", CountRows(Grp)
 )
 ```
 
-## Gallery (both screens)
+Category field: `TrainingCategory.Value`. Value field: `RequestCount`.
 
-`galItems.Items`:
+### Donut chart — requests by Status
 
 ```powerfx
-Sort(FilteredItems, DueDate, SortOrder.Ascending)
+AddColumns(
+    GroupBy(FilteredRequests, "Status", "Grp"),
+    "RequestCount", CountRows(Grp)
+)
 ```
 
-Search box (`txtSearch`) — add it to the filter above, or on Screen 2 use:
+### Trend chart — requests by month
 
 ```powerfx
-galItems.Items:
+AddColumns(
+    GroupBy(
+        AddColumns(FilteredRequests, "MonthKey", Text(RequestedDate, "yyyy-mm")),
+        "MonthKey", "Grp"
+    ),
+    "RequestCount", CountRows(Grp)
+)
+```
+
+Sort it before binding if your chart doesn't sort automatically:
+
+```powerfx
 Sort(
-    Filter(FilteredItems, StartsWith(Title, txtSearch.Text)),
-    DueDate,
+    AddColumns(
+        GroupBy(
+            AddColumns(FilteredRequests, "MonthKey", Text(RequestedDate, "yyyy-mm")),
+            "MonthKey", "Grp"
+        ),
+        "RequestCount", CountRows(Grp)
+    ),
+    MonthKey,
     SortOrder.Ascending
 )
 ```
 
-Gallery item template — label `Text` for the due-date label, colored red when overdue:
+### Top requested topics (gallery)
+
+`galTopTopics.Items`:
 
 ```powerfx
-// Label.Color
-If(ThisItem.DueDate < Today() && ThisItem.Status.Value <> "Completed", Red, Black)
+FirstN(
+    Sort(
+        AddColumns(
+            GroupBy(FilteredRequests, "Title", "Grp"),
+            "RequestCount", CountRows(Grp)
+        ),
+        RequestCount,
+        SortOrder.Descending
+    ),
+    10
+)
 ```
 
-## Detail form (Screen 2)
+Bind the gallery's title label to `ThisItem.Title` and a count label to `ThisItem.RequestCount`.
 
-Gallery `OnSelect`:
+---
+
+## Screen 3 — Manage Requests
+
+`galManage.Items`:
 
 ```powerfx
-Set(varSelectedItem, ThisItem);
-NewForm(EditForm1);
-EditForm1.Item = varSelectedItem;
-UpdateContext({showForm: true});
+Sort(
+    Filter(colRequests, IsBlank(ddStatusFilter.Selected) || Status.Value = ddStatusFilter.Selected.Result),
+    RequestedDate,
+    SortOrder.Descending
+)
 ```
 
-(Simplest working pattern: bind `EditForm1.Item` directly to
-`galItems.Selected`, and toggle the form's `Visible` with a boolean variable
-set in the gallery's `OnSelect`.)
-
-Save button `OnSelect`:
+`btnApprove.OnSelect` (with `galManage.Selected` as the current item):
 
 ```powerfx
-SubmitForm(EditForm1);
+Patch('Training Requests', galManage.Selected, { Status: { Value: "Approved" } });
+Refresh('Training Requests');
+ClearCollect(colRequests, 'Training Requests');
 ```
 
-`EditForm1.OnSuccess`:
+`btnReject.OnSelect`:
 
 ```powerfx
-Refresh('Dashboard Items');
-ClearCollect(colItems, 'Dashboard Items');
-UpdateContext({showForm: false});
+Patch(
+    'Training Requests',
+    galManage.Selected,
+    { Status: { Value: "Rejected" }, ApproverComments: txtComments.Text }
+);
+Refresh('Training Requests');
+ClearCollect(colRequests, 'Training Requests');
 ```

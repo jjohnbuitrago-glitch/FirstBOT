@@ -1,8 +1,13 @@
-# FirstBOT — Team Dashboard (Power Apps + SharePoint)
+# FirstBOT — Regional Training Request Tracker (Power Apps + SharePoint)
 
-A Power Platform canvas app that gives a team a single dashboard over a
-SharePoint list of work items: KPI tiles, a status/category breakdown, and a
-filterable, editable list.
+A Power Platform canvas app that consolidates training requests from across
+a region into one SharePoint list, and gives you an interactive dashboard
+to monitor demand: volume, by country, by training category, by status,
+and trend over time.
+
+Three screens: **Submit Request** (anyone in the region logs a request),
+**Dashboard** (you monitor demand), **Manage Requests** (approve/reject and
+track status).
 
 Canvas apps are built visually in Power Apps Studio — there's no way to
 generate a working `.msapp` by hand outside the tool (Microsoft's own
@@ -16,20 +21,20 @@ source (`*.pa.yaml`) will sync here automatically after every save.
 
 | Path | Purpose |
 | --- | --- |
-| `sharepoint/list-schema.md` | Column definitions for the `Dashboard Items` list |
+| `sharepoint/list-schema.md` | Column definitions for the `Training Requests` list |
 | `sharepoint/Provision-DashboardList.ps1` | PnP PowerShell script that creates the list and columns for you |
-| `powerapps/build-guide.md` | Step-by-step: create the environment/solution, build the app, wire up Git integration |
-| `powerapps/powerfx-snippets.md` | Copy-paste Power Fx formulas for every control (KPIs, charts, filters, forms) |
+| `powerapps/build-guide.md` | Step-by-step: create the environment/solution, build all 3 screens, wire up Git integration |
+| `powerapps/powerfx-snippets.md` | Copy-paste Power Fx formulas for the submit form, every dashboard chart/KPI, and the approve/reject actions |
 
 ## Quick start
 
-1. **Provision the data**: run `sharepoint/Provision-DashboardList.ps1` against your SharePoint site (see comments in the script for prerequisites).
-2. **Build the app**: follow `powerapps/build-guide.md` to create a solution-aware canvas app in Power Apps Studio bound to that list.
-3. **Paste the formulas**: use `powerapps/powerfx-snippets.md` for the KPI tiles, charts, and gallery.
-4. **Connect Git integration**: last section of the build guide — after this, every save in Studio pushes updated YAML source into this repo, so future changes show up as normal PRs/diffs.
+1. **Provision the data**: run `sharepoint/Provision-DashboardList.ps1` against your SharePoint site — edit the `-Countries` parameter to match your region.
+2. **Build the app**: follow `powerapps/build-guide.md` for the Submit, Dashboard, and Manage screens.
+3. **Paste the formulas**: `powerapps/powerfx-snippets.md` has the exact formula for every control, section by section.
+4. **Connect Git integration** (optional): last section of the build guide — after this, every save in Studio pushes updated YAML source into this repo.
 
 ## Prerequisites
 
 - A Microsoft 365 account with a Power Apps license (per-user or per-app; SharePoint is a *standard* connector, so no premium license is required for this app).
 - A SharePoint Online site you can create lists in.
-- A Dataverse environment for the solution + Git integration (a free Developer environment works: https://make.powerapps.com → Environments → New → Developer).
+- A Power Platform environment (a free Developer environment works: `make.powerapps.com` → Environments → New → Developer). Dataverse is only needed if you want Git integration.

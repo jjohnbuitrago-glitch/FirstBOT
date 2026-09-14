@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-    Creates the "Dashboard Items" SharePoint list used by the Team Dashboard Power App.
+    Creates the "Training Requests" SharePoint list used by the Regional
+    Training Request Tracker Power App.
 
 .DESCRIPTION
     Idempotent: safe to re-run. Creates the list (if missing) and adds any
@@ -11,13 +12,16 @@
     You need at least "Manage Lists" permission on the target site.
 
 .EXAMPLE
-    ./Provision-DashboardList.ps1 -SiteUrl "https://contoso.sharepoint.com/sites/TeamSite"
+    ./Provision-DashboardList.ps1 -SiteUrl "https://contoso.sharepoint.com/sites/RegionalTraining" `
+        -Countries "Colombia","Mexico","Peru","Chile"
 #>
 param(
     [Parameter(Mandatory = $true)]
     [string]$SiteUrl,
 
-    [string]$ListName = "Dashboard Items"
+    [string]$ListName = "Training Requests",
+
+    [string[]]$Countries = @("Colombia", "Mexico", "Peru", "Chile", "Other")
 )
 
 Connect-PnPOnline -Url $SiteUrl -Interactive
@@ -45,22 +49,40 @@ function Ensure-Field {
         -Type $Type -AddToDefaultView @ExtraArgs | Out-Null
 }
 
-Ensure-Field -List $list -InternalName "Category" -DisplayName "Category" -Type Choice `
-    -ExtraArgs @{ Choices = @("Sales", "Support", "Operations", "Other") }
+Ensure-Field -List $list -InternalName "Country" -DisplayName "Country" -Type Choice `
+    -ExtraArgs @{ Choices = $Countries }
 
-Ensure-Field -List $list -InternalName "Status" -DisplayName "Status" -Type Choice `
-    -ExtraArgs @{ Choices = @("Not Started", "In Progress", "Completed", "Blocked") }
+Ensure-Field -List $list -InternalName "Office" -DisplayName "Office / Site" -Type Text
+
+Ensure-Field -List $list -InternalName "Department" -DisplayName "Department" -Type Choice `
+    -ExtraArgs @{ Choices = @("Sales", "Operations", "Finance", "HR", "IT", "Other") }
+
+Ensure-Field -List $list -InternalName "RequestedBy0" -DisplayName "Requested By" -Type User
+
+Ensure-Field -List $list -InternalName "TrainingCategory" -DisplayName "Training Category" -Type Choice `
+    -ExtraArgs @{ Choices = @("Technical", "Leadership", "Compliance", "Soft Skills", "Onboarding", "Other") }
+
+Ensure-Field -List $list -InternalName "DeliveryMode" -DisplayName "Delivery Mode" -Type Choice `
+    -ExtraArgs @{ Choices = @("In-Person", "Virtual", "Hybrid") }
+
+Ensure-Field -List $list -InternalName "Participants" -DisplayName "# Participants" -Type Number
 
 Ensure-Field -List $list -InternalName "Priority" -DisplayName "Priority" -Type Choice `
-    -ExtraArgs @{ Choices = @("Low", "Medium", "High") }
+    -ExtraArgs @{ Choices = @("Low", "Medium", "High", "Urgent") }
 
-Ensure-Field -List $list -InternalName "Owner0" -DisplayName "Owner" -Type User
+Ensure-Field -List $list -InternalName "Status" -DisplayName "Status" -Type Choice `
+    -ExtraArgs @{ Choices = @("Submitted", "Under Review", "Approved", "Scheduled", "Completed", "Rejected", "Cancelled") }
 
-Ensure-Field -List $list -InternalName "DueDate" -DisplayName "Due Date" -Type DateTime `
+Ensure-Field -List $list -InternalName "RequestedDate" -DisplayName "Requested Date" -Type DateTime `
     -ExtraArgs @{ DateTimeDisplayFormat = "DateOnly" }
 
-Ensure-Field -List $list -InternalName "Value" -DisplayName "Value" -Type Number
+Ensure-Field -List $list -InternalName "PreferredStartDate" -DisplayName "Preferred Start Date" -Type DateTime `
+    -ExtraArgs @{ DateTimeDisplayFormat = "DateOnly" }
 
-Ensure-Field -List $list -InternalName "Notes" -DisplayName "Notes" -Type Note
+Ensure-Field -List $list -InternalName "EstimatedCost" -DisplayName "Estimated Cost" -Type Currency
+
+Ensure-Field -List $list -InternalName "Justification" -DisplayName "Business Justification" -Type Note
+
+Ensure-Field -List $list -InternalName "ApproverComments" -DisplayName "Approver Comments" -Type Note
 
 Write-Host "Done. List URL: $SiteUrl/Lists/$($ListName -replace ' ', '')"

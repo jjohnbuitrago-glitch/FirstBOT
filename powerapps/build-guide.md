@@ -1,63 +1,59 @@
-# Build guide: Team Dashboard canvas app
+# Build guide: Regional Training Request Tracker
 
-Follow these steps in order. Steps 1–4 happen in your browser (Power Apps /
-Power Platform admin center); step 5 is what wires this repo up to receive
-every future change automatically.
+An app with three screens:
 
-## 1. Create (or pick) a Dataverse environment
+1. **Submit Request** — anyone in the region logs a training request.
+2. **Dashboard** — you monitor demand: volume, by country, by category, by status, trend over time.
+3. **Manage Requests** (optional, for you/reviewers) — approve, reject, update status.
 
-Git integration for canvas apps requires the app to live inside a
-**solution** in a Dataverse-enabled environment.
+All three read/write the same `Training Requests` SharePoint list.
 
-1. Go to https://admin.powerplatform.microsoft.com → **Environments** → **New**.
-2. Type: **Developer** (free, one per user) or **Sandbox** if your org provides one.
-3. Enable a Dataverse database when prompted.
+## 1. Create the SharePoint list
 
-## 2. Create a solution
+Pick one:
+- **Manual**: create a list named `Training Requests` in your SharePoint site and add the columns in `sharepoint/list-schema.md`.
+- **Scripted**: `Install-Module PnP.PowerShell` then run `sharepoint/Provision-DashboardList.ps1 -SiteUrl "https://<tenant>.sharepoint.com/sites/<site>"` — edit the `-Countries` parameter to match your region.
 
-1. Go to https://make.powerapps.com, switch to the environment from step 1.
-2. **Solutions** → **New solution**. Name it `TeamDashboard`, pick a publisher (create one with a short prefix, e.g. `contoso`/`con_`).
+## 2. Create a Power Platform environment
 
-## 3. Add the canvas app inside the solution
+1. `admin.powerplatform.microsoft.com` → **Environments** → **+ New**.
+2. Type **Developer** (free) or **Sandbox**. Enable Dataverse if you want Git integration later (optional — skip if you just want the app).
 
-1. Open the `TeamDashboard` solution → **New** → **App** → **Canvas app**.
-2. Name it `Team Dashboard`, choose **Tablet** format.
-3. **Insert** → **Data** → connect to **SharePoint** → your site URL → select the `Dashboard Items` list (create it first with `sharepoint/Provision-DashboardList.ps1` if you haven't).
+## 3. Create a solution and the app
 
-## 4. Build the two screens
+1. `make.powerapps.com` → switch to your environment → **Solutions** → **+ New solution** → name it `TrainingDemandTracker`.
+2. Inside it: **+ New** → **App** → **Canvas app** → name `Training Request Tracker`, format **Tablet**.
+3. **Insert → Data → SharePoint** → your site → select `Training Requests`.
 
-### Screen 1 — Overview
+## 4. Screen 1 — Submit Request
 
-Add, in this order, then use `powerapps/powerfx-snippets.md` for each control's formula:
+1. Add screen, rename to `scrSubmit`.
+2. Insert a **Form** control → **Edit form** → set `DataSource` to `'Training Requests'`.
+3. In the form's **Fields** pane, include: Training Topic, Country, Office, Department, Training Category, Delivery Mode, # Participants, Priority, Preferred Start Date, Business Justification. Remove Status, Requested Date, Approver Comments, Estimated Cost — those aren't set by the requester.
+4. Add a **Submit** button. Formulas for this screen are in `powerapps/powerfx-snippets.md` under "Submit Request screen" — they auto-stamp `Status = "Submitted"` and `RequestedDate = Today()` on save.
 
-1. Four **KPI cards** (rectangle + label): Total Items, Completed %, Overdue, Total Value.
-2. A **column chart** control: count of items by `Category`.
-3. A **pie/donut chart** control: count of items by `Status`.
-4. Two **dropdown** controls for filtering by Category and Status.
-5. A **gallery** (vertical, blank) bound to the filtered items, showing Title, Owner, Status, DueDate.
+## 5. Screen 2 — Dashboard (the demand monitor)
 
-### Screen 2 — Details
+Add screen `scrDashboard`, then add, in order — full formulas in the snippets file:
 
-1. Duplicate the gallery from Screen 1, add a **Search** input box above it.
-2. Add an **Edit form** control bound to `'Dashboard Items'`, hidden by default.
-3. Gallery `OnSelect`: `NewForm(Form1); Navigate(Screen2, ScreenTransition.None)` pattern, or simply show/hide the form panel — see snippets file.
+1. **Date range filter**: two date pickers (`dtFrom`, `dtTo`), defaulted to the last 12 months.
+2. **KPI cards**: Total Requests, Total Participants Requested, Pending Approvals, Avg. Requests/Month.
+3. **Column chart**: requests by `Country` — this is your regional breakdown.
+4. **Column or bar chart**: requests by `TrainingCategory` — shows what topics are most in demand.
+5. **Donut chart**: requests by `Status` — pipeline health at a glance.
+6. **Line/column chart**: requests by month (`RequestedDate`) — demand trend over time.
+7. **Gallery**: "Top requested topics" — `Title` grouped and counted, sorted descending, top 10.
 
-## 5. Connect Git integration (so this repo mirrors the app going forward)
+## 6. Screen 3 — Manage Requests (optional but recommended)
 
-1. In https://make.powerapps.com, open the `TeamDashboard` solution.
-2. **Solution settings** (gear icon) → **Solution history** / **Settings** → look for **Configure Git integration** (also reachable from the environment's **Settings → Git integration** in some tenants).
-3. Point it at this GitHub repository (`jjohnbuitrago-glitch/firstbot`) and the `claude/power-app-office-365-jg4zg2` branch (or `main` once merged).
-4. Authorize the connection (GitHub OAuth / PAT, per the wizard).
-5. Back in the solution, use **Sync with Git** → **Commit and sync** whenever you want to push your Studio changes here. Reference: https://learn.microsoft.com/power-platform/alm/git-integration/overview
+1. Add screen `scrManage`, gallery of all requests with Status filter dropdown.
+2. Selecting an item opens a **View/Edit form** with **Approve** and **Reject** buttons that just update `Status` (and optionally `ApproverComments`) — formulas in the snippets file.
+3. This is what turns "consolidate requests" into an actual workflow instead of a read-only list.
 
-After the first sync you'll see a new `solutions/TeamDashboard/` folder appear
-in this repo with the solution manifest and, under a `canvasapps/` folder,
-the app's real `*.pa.yaml` source — that's the file to review in future PRs.
+## 7. Publish and share
 
-## Notes
+**File → Save → Publish this version**, then **Share** with the region (give at least **User** access; give reviewers/yourself **Co-owner** if they need to edit the app itself). Everyone needs a Power Apps license covering standard connectors — SharePoint qualifies under most Microsoft 365 plans.
 
-- `pac canvas pack`/`unpack` are deprecated for authoring; Git integration is
-  the supported path for keeping a canvas app's source in a repo.
-- Keep control names meaningful and unique as you build — Git integration
-  diffs are per-control, and duplicate auto-generated names (`Button1`,
-  `Button2`) make future diffs harder to read.
+## 8. Optional — Git integration
+
+Same as any other solution: solution → gear icon → **Git integration** → point at this repo/branch → **Sync with Git → Commit and sync** after each Studio save, so the real `*.pa.yaml` source lands here for review.
